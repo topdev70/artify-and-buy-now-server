@@ -5,16 +5,16 @@ const axios = require("axios");
 const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
-const stripe = require("stripe")("sk_test_vnNvW1AxP9T0IbeWvXRtTKwI00cJXvxHdH");
 const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Load environment variables
+dotenv.config();
+
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 // Set up CORS
 app.use(
   cors({
@@ -67,14 +67,17 @@ const uploadToImgBB = async (base64Image) => {
   try {
     console.log("Uploading image to ImgBB...");
     const imgbbApiKey = "57dfc43cb536ca9a409ba9e3e1b17418"; // Using the provided API key
-    
+
     // Create form data for the request
     const formData = new FormData();
-    formData.append('key', imgbbApiKey);
-    formData.append('image', base64Image);
-    
-    const response = await axios.post("https://api.imgbb.com/1/upload", formData);
-    
+    formData.append("key", imgbbApiKey);
+    formData.append("image", base64Image);
+
+    const response = await axios.post(
+      "https://api.imgbb.com/1/upload",
+      formData
+    );
+
     if (response.data && response.data.success && response.data.data.url) {
       console.log("ImgBB upload successful:", response.data.data.url);
       return response.data.data.url;
@@ -98,7 +101,7 @@ app.post("/api/send-order-email", async (req, res) => {
     }
 
     console.log("Sending order notification email for:", orderDetails);
-    
+
     // Configure nodemailer transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -110,7 +113,7 @@ app.post("/api/send-order-email", async (req, res) => {
 
     console.log("Email transport configured with:", {
       user: process.env.EMAIL_USER || "prodev0703@gmail.com",
-      pass: "********" // Masked for security
+      pass: "********", // Masked for security
     });
 
     // Format price as currency
@@ -121,15 +124,15 @@ app.post("/api/send-order-email", async (req, res) => {
 
     // Get the shipping address, using the one provided by the user
     const shippingAddress = orderDetails.address || "Digital Delivery";
-    
+
     // Upload the image to ImgBB if it's a base64 image
-    let publicImageUrl = orderDetails.imageUrl || '';
-    
+    let publicImageUrl = orderDetails.imageUrl || "";
+
     // Don't upload to server - upload directly to ImgBB if it's a base64 image
-    if (publicImageUrl && publicImageUrl.startsWith('data:image')) {
+    if (publicImageUrl && publicImageUrl.startsWith("data:image")) {
       console.log("Detected base64 image, uploading directly to ImgBB...");
       try {
-        const base64 = publicImageUrl.split(',')[1];
+        const base64 = publicImageUrl.split(",")[1];
         publicImageUrl = await uploadToImgBB(base64);
         console.log("Image uploaded to ImgBB:", publicImageUrl);
       } catch (imgError) {
@@ -137,7 +140,7 @@ app.post("/api/send-order-email", async (req, res) => {
         // Keep the original base64 URL if ImgBB upload fails
       }
     }
-    
+
     // Prepare email content
     const mailOptions = {
       from: "AI Art Store <prodev0703@gmail.com>",
@@ -162,11 +165,15 @@ app.post("/api/send-order-email", async (req, res) => {
           <li><strong>Shipping Address:</strong> ${shippingAddress}</li>
         </ul>
         
-        ${publicImageUrl ? `
+        ${
+          publicImageUrl
+            ? `
         <h2>Generated Artwork:</h2>
         <img src="${publicImageUrl}" alt="Generated artwork" style="max-width: 500px; border: 1px solid #ddd; padding: 5px;">
         <p><a href="${publicImageUrl}" target="_blank">View full size image</a></p>
-        ` : ''}
+        `
+            : ""
+        }
         
         <p>Thank you for using AI Art Store!</p>
       `,
@@ -175,7 +182,7 @@ app.post("/api/send-order-email", async (req, res) => {
     console.log("Sending email with the following options:", {
       from: mailOptions.from,
       to: mailOptions.to,
-      subject: mailOptions.subject
+      subject: mailOptions.subject,
     });
 
     // Send the email
@@ -187,7 +194,7 @@ app.post("/api/send-order-email", async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Email sent",
-      messageId: info.messageId
+      messageId: info.messageId,
     });
   } catch (error) {
     console.error("Error sending order notification email:", error);
@@ -215,7 +222,7 @@ app.post("/api/transform-image", async (req, res) => {
     // If noSave is true, don't save to disk
     let tempFilePath;
     let savedImagePath;
-    
+
     // Only save temporarily for processing if needed
     tempFilePath = path.join(uploadDir, `temp-${Date.now()}.png`);
     fs.writeFileSync(tempFilePath, imageBuffer);
@@ -297,12 +304,14 @@ app.post("/api/transform-image", async (req, res) => {
 
           // If noSave is true, just return the base64 image without saving to the server
           if (noSave) {
-            console.log("noSave flag set to true, returning base64 image without saving to server");
+            console.log(
+              "noSave flag set to true, returning base64 image without saving to server"
+            );
             return res.json({
               transformedImageUrl: `data:image/png;base64,${base64Image}`,
             });
           }
-          
+
           // Otherwise save as before
           const imageId = `transformed-${Date.now()}.png`;
           savedImagePath = path.join(generatedDir, imageId);
@@ -334,15 +343,19 @@ app.post("/api/transform-image", async (req, res) => {
 
             // If noSave is true, just return the base64 without saving
             const contentType = imageResponse.headers["content-type"];
-            const base64Image = Buffer.from(imageResponse.data).toString("base64");
+            const base64Image = Buffer.from(imageResponse.data).toString(
+              "base64"
+            );
 
             if (noSave) {
-              console.log("noSave flag set to true, returning image without saving to server");
+              console.log(
+                "noSave flag set to true, returning image without saving to server"
+              );
               return res.json({
                 transformedImageUrl: `data:${contentType};base64,${base64Image}`,
               });
             }
-            
+
             // Otherwise save as before
             const imageId = `transformed-${Date.now()}.png`;
             savedImagePath = path.join(generatedDir, imageId);
